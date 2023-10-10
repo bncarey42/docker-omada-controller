@@ -18,6 +18,8 @@ PORT_UPGRADE_V1="${PORT_UPGRADE_V1:-29813}"
 PORT_MANAGER_V1="${PORT_MANAGER_V1:-29811}"
 PORT_MANAGER_V2="${PORT_MANAGER_V2:-29814}"
 PORT_DISCOVERY="${PORT_DISCOVERY:-29810}"
+PORT_TRANSFER_V2="${PORT_TRANSFER_V2:-29815}"
+PORT_RTTY="${PORT_RTTY:-29816}"
 # END PORTS CONFIGURATION
 
 SHOW_SERVER_LOGS="${SHOW_SERVER_LOGS:-true}"
@@ -27,19 +29,22 @@ SSL_KEY_NAME="${SSL_KEY_NAME:-tls.key}"
 TLS_1_11_ENABLED="${TLS_1_11_ENABLED:-false}"
 PUID="${PUID:-508}"
 PGID="${PGID:-508}"
+PUSERNAME="${PUSERNAME:-omada}"
+PGROUP="${PGROUP:-omada}"
+SKIP_USERLAND_KERNEL_CHECK="${SKIP_USERLAND_KERNEL_CHECK:-false}"
 
 # validate user/group exist with correct UID/GID
-echo "INFO: Validating user/group (omada:omada) exists with correct UID/GID (${PUID}:${PGID})"
+echo "INFO: Validating user/group (${PUSERNAME}:${PGROUP}) exists with correct UID/GID (${PUID}:${PGID})"
 
 # check to see if group exists; if not, create it
-if grep -q -E "^omada:" /etc/group > /dev/null 2>&1
+if grep -q -E "^${PGROUP}:" /etc/group > /dev/null 2>&1
 then
-  # exiting group found; also make sure the omada user matches the GID
-  echo "INFO: Group (omada) exists; skipping creation"
-  EXISTING_GID="$(id -g omada)"
+  # existing group found; also make sure the omada group matches the GID
+  echo "INFO: Group (${PGROUP}) exists; skipping creation"
+  EXISTING_GID="$(id -g "${PGROUP}")"
   if [ "${EXISTING_GID}" != "${PGID}" ]
   then
-    echo "ERROR: Group (omada) has an unexpected GID; was expecting '${PGID}' but found '${EXISTING_GID}'!"
+    echo "ERROR: Group (${PGROUP}) has an unexpected GID; was expecting '${PGID}' but found '${EXISTING_GID}'!"
     exit 1
   fi
 else
@@ -48,24 +53,24 @@ else
   then
     # group ID exists but has a different group name
     EXISTING_GROUP="$(grep ":${PGID}:" /etc/group | awk -F ':' '{print $1}')"
-    echo "INFO: Group (omada) already exists with a different name; renaming '${EXISTING_GROUP}' to 'omada'"
-    groupmod -n omada "${EXISTING_GROUP}"
+    echo "INFO: Group (${PGROUP}) already exists with a different name; renaming '${EXISTING_GROUP}' to '${PGROUP}'"
+    groupmod -n "${PGROUP}" "${EXISTING_GROUP}"
   else
     # create the group
-    echo "INFO: Group (omada) doesn't exist; creating"
-    groupadd -g "${PGID}" omada
+    echo "INFO: Group (${PGROUP}) doesn't exist; creating"
+    groupadd -g "${PGID}" "${PGROUP}"
   fi
 fi
 
 # check to see if user exists; if not, create it
-if id -u omada > /dev/null 2>&1
+if id -u "${PUSERNAME}" > /dev/null 2>&1
 then
   # exiting user found; also make sure the omada user matches the UID
-  echo "INFO: User (omada) exists; skipping creation"
-  EXISTING_UID="$(id -u omada)"
+  echo "INFO: User (${PUSERNAME}) exists; skipping creation"
+  EXISTING_UID="$(id -u "${PUSERNAME}")"
   if [ "${EXISTING_UID}" != "${PUID}" ]
   then
-    echo "ERROR: User (omada) has an unexpected UID; was expecting '${PUID}' but found '${EXISTING_UID}'!"
+    echo "ERROR: User (${PUSERNAME}) has an unexpected UID; was expecting '${PUID}' but found '${EXISTING_UID}'!"
     exit 1
   fi
 else
@@ -74,12 +79,12 @@ else
   then
     # user ID exists but has a different user name
     EXISTING_USER="$(grep ":${PUID}:" /etc/passwd | awk -F ':' '{print $1}')"
-    echo "INFO: User (omada) already exists with a different name; renaming '${EXISTING_USER}' to 'omada'"
-    usermod -g "${PGID}" -d /opt/tplink/EAPController/data -l omada -s /bin/sh -c "" "${EXISTING_USER}"
+    echo "INFO: User (${PUSERNAME}) already exists with a different name; renaming '${EXISTING_USER}' to '${PUSERNAME}'"
+    usermod -g "${PGID}" -d /opt/tplink/EAPController/data -l "${PUSERNAME}" -s /bin/sh -c "" "${EXISTING_USER}"
   else
     # create the user
-    echo "INFO: User (omada) doesn't exist; creating"
-    useradd -u "${PUID}" -g "${PGID}" -d /opt/tplink/EAPController/data -s /bin/sh -c "" omada
+    echo "INFO: User (${PUSERNAME}) doesn't exist; creating"
+    useradd -u "${PUID}" -g "${PGID}" -d /opt/tplink/EAPController/data -s /bin/sh -c "" "${PUSERNAME}"
   fi
 fi
 
@@ -92,7 +97,7 @@ do
   then
     echo "INFO: Properties file '${BASENAME}' missing, restoring default file..."
     cp "${FILE}" "/opt/tplink/EAPController/properties/${BASENAME}"
-    chown omada:omada "/opt/tplink/EAPController/properties/${BASENAME}"
+    chown "${PUSERNAME}:${PGROUP}" "/opt/tplink/EAPController/properties/${BASENAME}"
   fi
 done
 
@@ -107,7 +112,7 @@ then
 fi
 
 # update stored ports when different of enviroment defined ports
-for ELEM in MANAGE_HTTP_PORT MANAGE_HTTPS_PORT PORTAL_HTTP_PORT PORTAL_HTTPS_PORT PORT_ADOPT_V1 PORT_APP_DISCOVERY PORT_UPGRADE_V1 PORT_MANAGER_V1 PORT_MANAGER_V2 PORT_DISCOVERY
+for ELEM in MANAGE_HTTP_PORT MANAGE_HTTPS_PORT PORTAL_HTTP_PORT PORTAL_HTTPS_PORT PORT_ADOPT_V1 PORT_APP_DISCOVERY PORT_UPGRADE_V1 PORT_MANAGER_V1 PORT_MANAGER_V2 PORT_DISCOVERY PORT_TRANSFER_V2 PORT_RTTY
 do
   # convert element to key name
   KEY="$(echo "${ELEM}" | tr '[:upper:]' '[:lower:]' | tr '_' '.')"
@@ -116,10 +121,13 @@ do
   END_VAL=${!ELEM}
 
   # get the current value from the omada.properties file
-  STORED_PROP_VAL=$(grep -Po "(?<=${KEY}=)([0-9]+)" /opt/tplink/EAPController/properties/omada.properties)
+  STORED_PROP_VAL=$(grep -Po "(?<=${KEY}=)([0-9]+)" /opt/tplink/EAPController/properties/omada.properties || true)
 
   # check to see if we need to set the value
-  if [ "${STORED_PROP_VAL}" != "${END_VAL}" ]
+  if [ "${STORED_PROP_VAL}" = "" ]
+  then
+    echo "INFO: Skipping '${KEY}' - not present in omada.properties"
+  elif [ "${STORED_PROP_VAL}" != "${END_VAL}" ]
   then
     # check to see if we are trying to bind to privileged port
     if [ "${END_VAL}" -lt "1024" ] && [ "$(cat /proc/sys/net/ipv4/ip_unprivileged_port_start)" = "1024" ]
@@ -143,7 +151,7 @@ then
   # missing directory; extract from original
   echo "INFO: Report HTML directory missing; extracting backup to '/opt/tplink/EAPController/data/html'"
   tar zxvf /opt/tplink/EAPController/data-html.tar.gz -C /opt/tplink/EAPController/data
-  chown -R omada:omada /opt/tplink/EAPController/data/html
+  chown -R "${PUSERNAME}:${PGROUP}" /opt/tplink/EAPController/data/html
 fi
 
 # make sure that the pdf directory exists
@@ -152,7 +160,7 @@ then
   # missing directory; extract from original
   echo "INFO: Report PDF directory missing; creating '/opt/tplink/EAPController/data/pdf'"
   mkdir /opt/tplink/EAPController/data/pdf
-  chown -R omada:omada /opt/tplink/EAPController/data/pdf
+  chown -R "${PUSERNAME}:${PGROUP}" /opt/tplink/EAPController/data/pdf
 fi
 
 # make sure permissions are set appropriately on each directory
@@ -164,8 +172,8 @@ do
   if [ "${OWNER}" != "${PUID}" ] || [ "${GROUP}" != "${PGID}" ]
   then
     # notify user that uid:gid are not correct and fix them
-    echo "WARN: Ownership not set correctly on '/opt/tplink/EAPController/${DIR}'; setting correct ownership (omada:omada)"
-    chown -R omada:omada "/opt/tplink/EAPController/${DIR}"
+    echo "WARN: Ownership not set correctly on '/opt/tplink/EAPController/${DIR}'; setting correct ownership (${PUSERNAME}:${PGROUP})"
+    chown -R "${PUSERNAME}:${PGROUP}" "/opt/tplink/EAPController/${DIR}"
   fi
 done
 
@@ -182,7 +190,7 @@ if [ ! -d "/opt/tplink/EAPController/data/db" ]
 then
   echo "INFO: Database directory missing; creating '/opt/tplink/EAPController/data/db'"
   mkdir /opt/tplink/EAPController/data/db
-  chown omada:omada /opt/tplink/EAPController/data/db
+  chown "${PUSERNAME}:${PGROUP}" /opt/tplink/EAPController/data/db
   echo "done"
 fi
 
@@ -204,7 +212,7 @@ then
       echo "INFO: Creating keystore directory (${KEYSTORE_DIR})"
       mkdir "${KEYSTORE_DIR}"
       echo "INFO: Setting permissions on ${KEYSTORE_DIR}"
-      chown omada:omada "${KEYSTORE_DIR}"
+      chown "${PUSERNAME}:${PGROUP}" "${KEYSTORE_DIR}"
     fi
   fi
 
@@ -222,7 +230,7 @@ then
     -passout pass:tplink
 
   # set ownership/permission on keystore
-  chown omada:omada "${KEYSTORE_DIR}/eap.keystore"
+  chown "${PUSERNAME}:${PGROUP}" "${KEYSTORE_DIR}/eap.keystore"
   chmod 400 "${KEYSTORE_DIR}/eap.keystore"
 fi
 
@@ -293,19 +301,34 @@ else
   echo "${IMAGE_OMADA_VER}" > /opt/tplink/EAPController/data/LAST_RAN_OMADA_VER.txt
 fi
 
-echo "INFO: Starting Omada Controller as user omada"
+# check to see if we are in a bad situation with a 32 bit userland and 64 bit kernel (fails to start MongoDB on a Raspberry Pi)
+if [ "$(dpkg --print-architecture)" = "armhf" ] && [ "$(uname -m)" = "aarch64" ] && [ "${SKIP_USERLAND_KERNEL_CHECK}" = "false" ]
+then
+  echo "##############################################################################"
+  echo "##############################################################################"
+  echo "ERROR: 32 bit userspace with 64 bit kernel detected!  MongoDB will NOT start!"
+  echo "  See https://github.com/mbentley/docker-omada-controller/blob/master/KNOWN_ISSUES.md#mismatched-userland-and-kernel for how to fix the issue"
+  echo "##############################################################################"
+  echo "##############################################################################"
+
+  exit 1
+else
+  echo "INFO: userland/kernel check passed"
+fi
+
+echo "INFO: Starting Omada Controller as user ${PUSERNAME}"
 
 # tail the omada logs if set to true
 if [ "${SHOW_SERVER_LOGS}" = "true" ]
 then
-  gosu omada tail -F -n 0 /opt/tplink/EAPController/logs/server.log &
+  gosu "${PUSERNAME}" tail -F -n 0 /opt/tplink/EAPController/logs/server.log &
 fi
 
 # tail the mongodb logs if set to true
 if [ "${SHOW_MONGODB_LOGS}" = "true" ]
 then
-  gosu omada tail -F -n 0 /opt/tplink/EAPController/logs/mongod.log &
+  gosu "${PUSERNAME}" tail -F -n 0 /opt/tplink/EAPController/logs/mongod.log &
 fi
 
 # run the actual command as the omada user
-exec gosu omada "${@}"
+exec gosu "${PUSERNAME}" "${@}"
