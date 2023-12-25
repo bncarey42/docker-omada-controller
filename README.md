@@ -28,15 +28,22 @@ Docker image for [TP-Link Omada Controller](https://www.tp-link.com/us/business-
 * [Using Docker Compose](#using-docker-compose)
 * [Omada Controller API Documentation](#omada-controller-api-documentation)
 * [Known Issues](#known-issues)
-    * [MongoDB Corruption](KNOWN_ISSUES.md#mongodb-corruption)
-    * [Raspberry Pi 4 Issues](KNOWN_ISSUES.md#raspberry-pi-4-issues)
+    * [Containerization Issues](KNOWN_ISSUES.md#containerization-issues)
+        * [MongoDB Corruption](KNOWN_ISSUES.md#mongodb-corruption)
+        * [Notes for `armv7l`](KNOWN_ISSUES.md#notes-for-armv7l)
+            * [:warning: Unsupported Base Image for `armv7l`](KNOWN_ISSUES.md#unsupported-base-image-for-armv7l)
+            * [:warning: Unsupported MongoDB](KNOWN_ISSUES.md#unsupported-mongodb)
+        * [Low Resource Systems](KNOWN_ISSUES.md#low-resource-systems)
+        * [Mismatched Userland and Kernel](KNOWN_ISSUES.md#mismatched-userland-and-kernel)
     * [Upgrade Issues](KNOWN_ISSUES.md#upgrade-issues)
         * [5.8 - 404s and Blank Pages](KNOWN_ISSUES.md#58---404s-and-blank-pages)
         * [Incorrect CMD](KNOWN_ISSUES.md#incorrect-cmd)
         * [5.12 - Unable to Login After Upgrade](KNOWN_ISSUES.md#512---unable-to-login-after-upgrade)
-    * [Notes for armv7l](KNOWN_ISSUES.md#notes-for-armv7l)
+        * [Slowness in Safari](KNOWN_ISSUES.md#slowness-in-safari)
 
 ## Image Tags
+
+:warning: **Warning** :warning: Do **NOT** run the `armv7l` (32 bit) images. Upgrade your operating system to `arm64` (64 bit) unless you accept that you're running an outdated MongoDB and a base operating system with unpatched vulnerabilities! See the [Known Issues readme](KNOWN_ISSUES.md#notes-for-armv7l) for more information.
 
 ### Multi-arch Tags
 
@@ -44,17 +51,10 @@ The following tags have multi-arch support for `amd64`, `armv7l`, and `arm64` an
 
 | Tag(s) | Major.Minor Release | Current Version |
 | :----- | ------------------- | --------------- |
-| `latest`, `5.12` | Omada Controller `5.12.x` | `5.12.7` |
-| `beta` | Omada Controller `beta` | `5.12.6` |
+| `latest`, `5.13` | Omada Controller `5.13.x` | `5.13.22` |
+| `beta` | Omada Controller `beta` | `5.13.10` |
+| `5.12` | Omada Controller `5.12.x` | `5.12.7` |
 | `5.9` | Omada Controller `5.9.x` | `5.9.31` |
-| `5.8` | Omada Controller `5.8.x` | `5.8.4` |
-| `5.7` | Omada Controller `5.7.x` | `5.7.4` |
-| `5.6` | Omada Controller `5.6.x` | `5.6.3` |
-| `5.5` | Omada Controller `5.5.x` | `5.5.6` |
-| `5.4` | Omada Controller `5.4.x` | `5.4.6` |
-| `5.3` | Omada Controller `5.3.x` | `5.3.1` |
-| `5.1` | Omada Controller `5.1.x` | `5.1.7` |
-| `5.0` | Omada Controller `5.0.x` | `5.0.30` |
 | `4.4` | Omada Controller `4.4.x` | `4.4.8` |
 | `4.1` | Omada Controller `4.1.x` | `4.1.5` |
 | `3.2` | Omada Controller `3.2.x` | `3.2.17` |
@@ -65,16 +65,10 @@ The following tags have multi-arch support for `amd64`, `armv7l`, and `arm64` an
 
 | Tag(s) | Major.Minor Release |
 | :----- | ------------------- |
-| `latest-chromium`, `5.12-chromium` | Omada Controller `5.12.x` |
+| `latest-chromium`, `5.13-chromium` | Omada Controller `5.13.x` |
 | `beta-chromium`, | Omada Controller `beta` |
+| `5.12-chromium` | Omada Controller `5.12.x` |
 | `5.9-chromium` | Omada Controller `5.9.x` |
-| `5.8-chromium` | Omada Controller `5.8.x` |
-| `5.7-chromium` | Omada Controller `5.7.x` |
-| `5.6-chromium` | Omada Controller `5.6.x` |
-| `5.5-chromium` | Omada Controller `5.5.x` |
-| `5.4-chromium` | Omada Controller `5.4.x` |
-| `5.3-chromium` | Omada Controller `5.3.x` |
-| `5.1-chromium` | Omada Controller `5.1.x` |
 
 ### Explicit Architecture Tags
 
@@ -86,6 +80,21 @@ These images are still published on Docker Hub but are no longer regularly updat
 
 | Tag(s) | Major.Minor Release | Current Version |
 | :----- | ------------------- | ----------------|
+| `5.8` | Omada Controller `5.8.x` | `5.8.4` |
+| `5.8-chromium` | Omada Controller `5.8.x` | `5.8.4` |
+| `5.7` | Omada Controller `5.7.x` | `5.7.4` |
+| `5.7-chromium` | Omada Controller `5.7.x` | `5.7.4` |
+| `5.6` | Omada Controller `5.6.x` | `5.6.3` |
+| `5.6-chromium` | Omada Controller `5.6.x` | `5.6.3` |
+| `5.5` | Omada Controller `5.5.x` | `5.5.6` |
+| `5.5-chromium` | Omada Controller `5.5.x` | `5.5.6` |
+| `5.4` | Omada Controller `5.4.x` | `5.4.6` |
+| `5.4-chromium` | Omada Controller `5.4.x` | `5.4.6` |
+| `5.3` | Omada Controller `5.3.x` | `5.3.1` |
+| `5.3-chromium` | Omada Controller `5.3.x` | `5.3.1` |
+| `5.1` | Omada Controller `5.1.x` | `5.1.7` |
+| `5.1-chromium` | Omada Controller `5.1.x` | `5.1.7` |
+| `5.0` | Omada Controller `5.0.x` | `5.0.30` |
 | `4.3` | Omada Controller `4.3.x` | `4.3.5` |
 | `4.2` | Omada Controller `4.2.x` | `4.2.11` |
 | `3.1` | Omada Controller `3.1.x` | `3.1.13` |
@@ -109,7 +118,7 @@ As always, take backups and read the documentation but the quick explanation of 
 
 * `3.2` -> `4.1`
     * This is a manual upgrade. See [Upgrading to 4.1 from 3.2.10 or below](#upgrading-to-41-from-3210-or-below).
-* `4.1` -> `5.x` (latest)
+* `4.1` or `4.4` -> `5.x` (latest)
     * These are automatic upgrades that take place by updating the image tag.
 
 ## Upgrading to 5.0.x from 4.1.x or above
@@ -154,9 +163,9 @@ As of the Omada Controller version 4.x, the Dockerfiles have been simplified so 
 
   ```
   docker build \
-    --build-arg INSTALL_VER="5.12" \
+    --build-arg INSTALL_VER="5.13" \
     -f Dockerfile.v5.x \
-    -t mbentley/omada-controller:5.12 .
+    -t mbentley/omada-controller:5.13 .
   ```
 
 ### `arm64`
@@ -165,10 +174,10 @@ As of the Omada Controller version 4.x, the Dockerfiles have been simplified so 
 
   ```
   docker build \
-    --build-arg INSTALL_VER="5.12" \
+    --build-arg INSTALL_VER="5.13" \
     --build-arg ARCH="arm64" \
     -f Dockerfile.v5.x \
-    -t mbentley/omada-controller:5.12-arm64 .
+    -t mbentley/omada-controller:5.13-arm64 .
   ```
 
 ### `armv7l`
@@ -177,11 +186,11 @@ As of the Omada Controller version 4.x, the Dockerfiles have been simplified so 
 
   ```
   docker build \
-    --build-arg INSTALL_VER="5.12" \
+    --build-arg INSTALL_VER="5.13" \
     --build-arg ARCH="armv7l" \
     --build-arg BASE="ubuntu:16.04" \
-    -f Dockerfile.v5.x \
-    -t mbentley/omada-controller:5.12-armv7l .
+    -f Dockerfile.v5.x-armv7l \
+    -t mbentley/omada-controller:5.13-armv7l .
   ```
 
 </details>
@@ -234,7 +243,7 @@ docker run -d \
   -e TZ=Etc/UTC \
   -v omada-data:/opt/tplink/EAPController/data \
   -v omada-logs:/opt/tplink/EAPController/logs \
-  mbentley/omada-controller:5.12
+  mbentley/omada-controller:5.13
 ```
 
 <details>
