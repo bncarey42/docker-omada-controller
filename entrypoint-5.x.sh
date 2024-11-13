@@ -25,6 +25,10 @@ PORT_RTTY="${PORT_RTTY:-29816}"
 # EXTERNAL MONGODB
 MONGO_EXTERNAL="${MONGO_EXTERNAL:-false}"
 EAP_MONGOD_URI="${EAP_MONGOD_URI:-mongodb://127.0.0.1:27217/omada}"
+# escape & for eval
+EAP_MONGOD_URI="$(eval echo "${EAP_MONGOD_URI//&/\\&}")"
+# escape after eval as well for sed
+EAP_MONGOD_URI="${EAP_MONGOD_URI//&/\\&}"
 # END EXTERNAL MONGODB
 
 SHOW_SERVER_LOGS="${SHOW_SERVER_LOGS:-true}"
@@ -46,7 +50,7 @@ if grep -q -E "^${PGROUP}:" /etc/group > /dev/null 2>&1
 then
   # existing group found; also make sure the omada group matches the GID
   echo "INFO: Group (${PGROUP}) exists; skipping creation"
-  EXISTING_GID="$(id -g "${PGROUP}")"
+  EXISTING_GID="$(getent group "${PGROUP}" | cut -d: -f3)"
   if [ "${EXISTING_GID}" != "${PGID}" ]
   then
     echo "ERROR: Group (${PGROUP}) has an unexpected GID; was expecting '${PGID}' but found '${EXISTING_GID}'!"
@@ -324,6 +328,23 @@ else
   LAST_RAN_OMADA_VER="0.0.0"
 fi
 
+# make sure we are not trying to upgrade from 4.x to 5.14.32.x
+LAST_RAN_MAJOR_VER="$(echo "${LAST_RAN_OMADA_VER}" | awk -F '.' '{print $1}')"
+IMAGE_MAJOR_VER="$(echo "${IMAGE_OMADA_VER}" | awk -F '.' '{print $1}')"
+IMAGE_MINOR_VER="$(echo "${IMAGE_OMADA_VER}" | awk -F '.' '{print $2}')"
+
+# make sure we are not trying to upgrade from 4.x to 5.14.32.x or greater
+if [ "${LAST_RAN_MAJOR_VER}" = "4" ] && [ "${IMAGE_MAJOR_VER}" -ge "5" ]
+then
+  # check to see if we are runnning 5.14 or greater
+  if [ "${IMAGE_MAJOR_VER}" = "5" ] && [ "${IMAGE_MINOR_VER}" -ge "14" ] || [ "${IMAGE_MAJOR_VER}" -gt "5" ]
+  then
+    echo "ERROR: You are attempting to upgrade from 4.x to 5.14.x or greater; the upgrade code was removed in 5.14.x!"
+    echo "  See https://github.com/mbentley/docker-omada-controller/blob/master/README_v3_and_v4.md#upgrade-path for the upgrade path from 4.x to 5.x"
+    exit 1
+  fi
+fi
+
 # use sort to check which version is newer; should sort the newest version to the top
 if [ "$(printf '%s\n' "${IMAGE_OMADA_VER}" "${LAST_RAN_OMADA_VER}" | sort -rV | head -n1)" != "${IMAGE_OMADA_VER}" ]
 then
@@ -349,6 +370,41 @@ then
   exit 1
 else
   echo "INFO: userland/kernel check passed"
+fi
+
+# show java version
+echo -e "INFO: output of 'java -version':\n$(java -version 2>&1)\n"
+
+# get the java version in different formats
+JAVA_VERSION="$(java -version 2>&1 | head -n 1 | awk -F '"' '{print $2}')"
+JAVA_VERSION_1="$(echo "${JAVA_VERSION}" | awk -F '.' '{print $1}')"
+JAVA_VERSION_2="$(echo "${JAVA_VERSION}" | awk -F '.' '{print $2}')"
+
+# for java 8, remove the opens argument from the CMD
+case ${JAVA_VERSION_1}.${JAVA_VERSION_2} in
+  1.8)
+    echo "INFO: running Java 8; removing '--add-opens' option(s) from CMD (if present)..."
+    # remove opens option
+    NEW_CMD="${*}"
+    NEW_CMD="${NEW_CMD/'--add-opens java.base/sun.security.x509=ALL-UNNAMED '/}"
+    NEW_CMD="${NEW_CMD/'--add-opens java.base/sun.security.util=ALL-UNNAMED '/}"
+    # shellcheck disable=SC2086
+    set -- ${NEW_CMD}
+    ;;
+esac
+
+# check for autobackup
+if [ ! -d "/opt/tplink/EAPController/data/autobackup" ]
+then
+  echo
+  echo "##############################################################################"
+  echo "##############################################################################"
+  echo "WARNGING: autobackup directory not found! Please configure automatic backups!"
+  echo "  For instructions, see https://github.com/mbentley/docker-omada-controller#controller-backups"
+  echo "##############################################################################"
+  echo "##############################################################################"
+  echo
+  sleep 2
 fi
 
 echo "INFO: Starting Omada Controller as user ${PUSERNAME}"
