@@ -10,7 +10,7 @@ COPY healthcheck.sh install.sh /
 ARG ARCH=amd64
 
 # install version (major.minor or full version); OMADA_URL set in install.sh
-ARG INSTALL_VER="5.15.8.2"
+ARG INSTALL_VER="5.15.20.20"
 ARG NO_MONGODB=false
 
 # install omada controller (instructions taken from install.sh)
@@ -18,9 +18,10 @@ RUN /install.sh &&\
   rm /install.sh
 
 COPY entrypoint-5.x.sh /entrypoint.sh
+COPY entrypoint-rootless.sh /entrypoint-rootless.sh
 
 WORKDIR /opt/tplink/EAPController/lib
-EXPOSE 8088 8043 8843 29810/udp 29811 29812 29813 29814
+EXPOSE 8088 8043 8843 19810/udp 27001/udp 29810/udp 29811 29812 29813 29814 29815 29816
 HEALTHCHECK --start-period=5m CMD /healthcheck.sh
 VOLUME ["/opt/tplink/EAPController/data","/opt/tplink/EAPController/logs"]
 ENTRYPOINT ["/entrypoint.sh"]

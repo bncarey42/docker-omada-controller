@@ -1,5 +1,7 @@
 # Known Issues
 
+* [Controller Software Issues](#controller-software-issues)
+    * [Devices Fail to Adopt](#devices-fail-to-adopt)
 * [Containerization Issues](#containerization-issues)
     * [MongoDB Corruption](#mongodb-corruption)
     * [Notes for `armv7l`](#notes-for-armv7l)
@@ -15,6 +17,12 @@
     * [5.14 - Controller Unable to Start](#514---controller-unable-to-start)
     * [5.15 - Controller Unable to Start](#515---controller-unable-to-start)
 
+## Controller Software Issues
+
+### Devices Fail to Adopt
+
+Users who are using `bridge` mode often report that switches and EAPs fail to adopt. This is due to the controller being technically being on a different network inside the container's bridge network, exporting the ports via NAT. Using port mapping is more complex than using host networking as your devices need to be informed of the controller's IP or hostname. See [this TP-Link FAQ](https://www.tp-link.com/us/support/faq/3087/) for details on how to configure this on your device(s) prior to attempting to adopt them.
+
 ## Containerization Issues
 
 ### MongoDB Corruption
@@ -23,7 +31,7 @@ While MongoDB is fairly robust, the persistent data can become corrupt if a clea
 
 ### Notes for `armv7l`
 
-** ⚠ Deprecation and Removal Notice ⚠** - armv7l images will no longer be available starting with the v5.15.20 and later versions. See [this issue](https://github.com/mbentley/docker-omada-controller/issues/542) describing the change.
+** ⚠ Deprecation and Removal Notice ⚠** - armv7l images will no longer be available starting with the v5.15.20 and later versions. See [this issue](https://github.com/mbentley/docker-omada-controller/issues/542) describing the change. The last version that will be available for `armv7l` is `5.15.8.2`.
 
 **tl;dr** - Do not run the Omada Controller on your `armv7l`/`armhf` (32 bit arm) based operating system! If you're running as Raspberry Pi 3, 4, Pi Zero 2W, you should [run a 64 bit operating system](https://www.raspberrypi.com/news/raspberry-pi-os-64-bit/) so you can use the `arm64` image which is supported. At any time, TP-Link can break compatibility with 32 bit arm and there will be no upgrade path forward! You have been warned!
 

@@ -19,17 +19,20 @@ For references on running a legacy v3 or v4 controller, see the [README for v3 a
     * [Preventing Database Corruption](#preventing-database-corruption)
 * [Building Images](#building-images)
 * [Example Usage](#example-usage)
-    * [Using non-default ports](#using-non-default-ports)
-    * [Using port mapping](#using-port-mapping)
     * [Using `net=host`](#using-nethost)
+    * [Using port mapping](#using-port-mapping)
+    * [Using non-default ports](#using-non-default-ports)
+    * [Running Rootless](#running-rootless)
 * [Optional Variables](#optional-variables)
 * [Persistent Data](#persistent-data)
-* [Custom Certificates](#custom-certificates)
+* [Custom SSL Certificates](#custom-ssl-certificates)
 * [Time Zones](#time-zones)
 * [Unprivileged Ports](#unprivileged-ports)
 * [Using Docker Compose](#using-docker-compose)
 * [Omada Controller API Documentation](#omada-controller-api-documentation)
-* [Known Issues](#known-issues)
+* [Known Issues](KNOWN_ISSUES.md#known-issues)
+    * [Controller Software Issues](KNOWN_ISSUES.md#controller-software-issues)
+        * [Devices Fail to Adopt](KNOWN_ISSUES.md#devices-fail-to-adopt)
     * [Containerization Issues](KNOWN_ISSUES.md#containerization-issues)
         * [MongoDB Corruption](KNOWN_ISSUES.md#mongodb-corruption)
         * [Notes for `armv7l`](KNOWN_ISSUES.md#notes-for-armv7l)
@@ -47,15 +50,15 @@ For references on running a legacy v3 or v4 controller, see the [README for v3 a
 
 ## Image Tags
 
-:warning: **Warning** :warning: Do **NOT** run the `armv7l` (32 bit) images. Upgrade your operating system to `arm64` (64 bit) unless you accept that you're running an outdated MongoDB and a base operating system with unpatched vulnerabilities! See the [Known Issues readme](KNOWN_ISSUES.md#notes-for-armv7l) for more information.
+:warning: **Warning** :warning: Do **NOT** run the `armv7l` (32 bit) images. Upgrade your operating system to `arm64` (64 bit) unless you accept that you're running an outdated MongoDB, a base operating system with unpatched vulnerabilities, an old version of Java, and a controller that will never be upgraded beyond `5.15.8.2`! See the [Known Issues readme](KNOWN_ISSUES.md#notes-for-armv7l) for more information.
 
 ### Multi-arch Tags
 
-For a full tag list, search the [Docker Hub tags list](https://hub.docker.com/r/mbentley/omada-controller/tags). The following tags have multi-arch support for `amd64`, `armv7l`, and `arm64` and will automatically pull the correct tag based on your system's architecture:
+For a full tag list, search the [Docker Hub tags list](https://hub.docker.com/r/mbentley/omada-controller/tags). The following tags have multi-arch support for `amd64` and `arm64` and will automatically pull the correct tag based on your system's architecture:
 
 | Tag(s) | Major.Minor Release | Current Version |
 | :----- | ------------------- | --------------- |
-| `latest`, `5.15` | `5.15.x` | `5.15.8.2` |
+| `latest`, `5.15` | `5.15.x` | `5.15.20.20` |
 | `5.14` | `5.14.x` | `5.14.32.4` |
 
 ### Tags with Chromium
@@ -74,19 +77,19 @@ These are multi-arch tags. For the full tag listings, see the Docker Hub tags ab
 
 | Tag(s) | Major.Minor Release | Current Version |
 | :----- | ------------------- | --------------- |
-| `beta`, `beta-5.15` | `beta` | `5.15.20.12` |
-| `beta-5.15-openj9`, `beta-5.15.8.2-openj9` | `5.15.x` Beta w/OpenJ9 | `5.15.20.12` |
+| `beta`, `beta-5.15` | `beta` | `5.15.24.14` |
+| `beta-5.15-openj9`, `beta-5.15.24.14-openj9` | `5.15.x` Beta w/OpenJ9 | `5.15.24.14` |
 | --- | --- | --- |
-| `5.15-openj9`, `5.15.8.2-openj9` | `5.15.x` w/OpenJ9 | `5.15.8.2` |
+| `5.15-openj9`, `5.15.20.20-openj9` | `5.15.x` w/OpenJ9 | `5.15.20.20` |
 | `5.14-openj9`, `5.14.32.4-openj9` | `5.14.x` w/OpenJ9 | `5.14.32.4` |
 
 ### Explicit Architecture Tags
 
-If for some reason you can't use the multi-arch tags, there are explicitly tagged images with the architecture (`-amd64`, `-arm64`, and `-armv7l`) appended to them. Check [Docker Hub](https://hub.docker.com/r/mbentley/omada-controller/tags) for the full list of tags.
+If for some reason you can't use the multi-arch tags, there are explicitly tagged images with the architecture (`-amd64` and `-arm64`) appended to them. Check [Docker Hub](https://hub.docker.com/r/mbentley/omada-controller/tags) for the full list of tags.
 
 ### Explicit Version Tags
 
-If you need a specific version of the controller, starting with 5.13 and 5.14, there are explicitly tagged images with the exact version (i.e. - `5.15.8.2`) in the tag name. Check [Docker Hub](https://hub.docker.com/r/mbentley/omada-controller/tags) for the full list of tags.
+If you need a specific version of the controller, starting with 5.13 and 5.14, there are explicitly tagged images with the exact version (i.e. - `5.15.20.20`) in the tag name. Check [Docker Hub](https://hub.docker.com/r/mbentley/omada-controller/tags) for the full list of tags.
 
 ## Archived Tags
 
@@ -131,7 +134,7 @@ Backups can also be taken manually on the same screen as the auto backup setting
 
 ### Controller Upgrades
 
-Before performing and upgrade, I would suggest taking a backup through the controller itself. Controller upgrades are done by stopping the existing container gracefully (see the [note below](#preventing-database-corruption) on this topic), removing the existing container, and running a new container with the new version of the controller. This can be done manually, with compose, or with manby other 3rd party tools which auto-update containers.
+Before performing any upgrade, I would suggest taking a backup through the controller itself. Controller upgrades are done by stopping the existing container gracefully (see the [note below](#preventing-database-corruption) on this topic), removing the existing container, and running a new container with the new version of the controller. This can be done manually, with compose, or with many other 3rd party tools which auto-update containers.
 
 ### Preventing Database Corruption
 
@@ -150,7 +153,7 @@ There are some differences between the build steps for `amd64`, `arm64`, and `ar
 
   ```
   docker build \
-    --build-arg INSTALL_VER="5.15.8.2" \
+    --build-arg INSTALL_VER="5.15.20.20" \
     --build-arg ARCH="amd64" \
     -f Dockerfile.v5.x \
     -t mbentley/omada-controller:5.15-amd64 .
@@ -162,13 +165,15 @@ There are some differences between the build steps for `amd64`, `arm64`, and `ar
 
   ```
   docker build \
-    --build-arg INSTALL_VER="5.15.8.2" \
+    --build-arg INSTALL_VER="5.15.20.20" \
     --build-arg ARCH="arm64" \
     -f Dockerfile.v5.x \
     -t mbentley/omada-controller:5.15-arm64 .
   ```
 
 ### `armv7l`
+
+  **Warning**: the `armv7l` version was deprecated and support has been removed for versions beyond `5.15.8.2`.
 
   Both the `ARCH` and `BASE` build-args are required
 
@@ -185,15 +190,28 @@ There are some differences between the build steps for `amd64`, `arm64`, and `ar
 
 ## Example Usage
 
-To run this Docker image and keep persistent data in named volumes:
+See [Optional Variables](#optional-variables) for details on the environment variables that can modify the behavior of the controller inside the container. To run this Docker image and keep persistent data in named volumes:
 
-### Using non-default ports
+### Using `net=host`
 
-__tl;dr__: Always make sure the environment variables for the ports match any changes you have made in the web UI and you'll be fine.
+Using host networking mode is the preferred method of running the controller. In order to use the host's network namespace, you must first ensure that there are not any port conflicts. The `docker run` command is the same except for that all of the published ports should be removed and `--net host` should be added. Technically it will still work if you have the ports included, but Docker will just silently drop them. Here is a snippet of what the above should be modified to look like:
 
-If you want to change the ports of your Omada Controller to something besides the defaults, there is some unexpected behavior that the controller exhibits. There are two sets of ports: one for HTTP/HTTPS for the controller itself and another for HTTP/HTTPS for the captive portal, typically used for authentication to a guest network. The controller's set of ports, which are set by the `MANAGE_*_PORT` environment variables, can only be modified using the environment variables on the first time the controller is started. If persistent data exists, changing the controller's ports via environment variables will have no effect on the controller itself and can only be modified through the web UI. On the other hand, the portal ports will always be set to whatever has been set in the environment variables, which are set by the `PORTAL_*_PORT` environment variables.
+```bash
+docker run -d \
+  --name omada-controller \
+  --stop-timeout 60 \
+  --restart unless-stopped \
+  --ulimit nofile=4096:8192 \
+  --net host \
+  -e TZ=Etc/UTC \
+  -v omada-data:/opt/tplink/EAPController/data \
+  -v omada-logs:/opt/tplink/EAPController/logs \
+  mbentley/omada-controller:5.15
+```
 
 ### Using port mapping
+
+Using port mapping is more complex than using host networking as your devices need to be informed of the controller's IP or hostname. See [this TP-Link FAQ](https://www.tp-link.com/us/support/faq/3087/) for details on how to configure this on your device(s) prior to attempting to adopt them.
 
 __Warning__: If you want to change the controller ports from the default mappings, you *absolutely must* update the port binding inside the container via the environment variables. The ports exposed must match what is inside the container. The Omada Controller software expects that the ports are the same inside the container and outside and will load a blank page if that is not done. See [#99](https://github.com/mbentley/docker-omada-controller/issues/99#issuecomment-821243857) for details and and example of the behavior.
 
@@ -206,44 +224,33 @@ docker run -d \
   -p 8088:8088 \
   -p 8043:8043 \
   -p 8843:8843 \
+  -p 19810:19810/udp \
   -p 27001:27001/udp \
   -p 29810:29810/udp \
   -p 29811-29816:29811-29816 \
-  -e MANAGE_HTTP_PORT=8088 \
-  -e MANAGE_HTTPS_PORT=8043 \
-  -e PGID="508" \
-  -e PORTAL_HTTP_PORT=8088 \
-  -e PORTAL_HTTPS_PORT=8843 \
-  -e PORT_ADOPT_V1=29812 \
-  -e PORT_APP_DISCOVERY=27001 \
-  -e PORT_DISCOVERY=29810 \
-  -e PORT_MANAGER_V1=29811 \
-  -e PORT_MANAGER_V2=29814 \
-  -e PORT_TRANSFER_V2=29815 \
-  -e PORT_RTTY=29816 \
-  -e PORT_UPGRADE_V1=29813 \
-  -e PUID="508" \
-  -e SHOW_SERVER_LOGS=true \
-  -e SHOW_MONGODB_LOGS=false \
-  -e SSL_CERT_NAME="tls.crt" \
-  -e SSL_KEY_NAME="tls.key" \
   -e TZ=Etc/UTC \
   -v omada-data:/opt/tplink/EAPController/data \
   -v omada-logs:/opt/tplink/EAPController/logs \
   mbentley/omada-controller:5.15
 ```
 
-### Using `net=host`
+### Using non-default ports
 
-In order to use the host's network namespace, you must first ensure that there are not any port conflicts. The `docker run` command is the same except for that all of the published ports should be removed and `--net host` should be added. Technically it will still work if you have the ports included, but Docker will just silently drop them. Here is a snippet of what the above should be modified to look like:
+__tl;dr__: Always make sure the environment variables for the ports match any changes you have made in the web UI and you'll be fine.
 
-```bash
-...
-  --restart unless-stopped \
-  --net host \
-  -e MANAGE_HTTP_PORT=8088 \
-...
-```
+If you want to change the ports of your Omada Controller to something besides the defaults, there is some unexpected behavior that the controller exhibits. There are two sets of ports: one for HTTP/HTTPS for the controller itself and another for HTTP/HTTPS for the captive portal, typically used for authentication to a guest network. The controller's set of ports, which are set by the `MANAGE_*_PORT` environment variables, can only be modified using the environment variables on the first time the controller is started. If persistent data exists, changing the controller's ports via environment variables will have no effect on the controller itself and can only be modified through the web UI. On the other hand, the portal ports will always be set to whatever has been set in the environment variables, which are set by the `PORTAL_*_PORT` environment variables.
+
+### Running Rootless
+
+There is an optional ability to run the container in a rootless mode. This version has fewer pre-flight capabilities to do tasks like set permissions for you but works in environments where running containers as root is blocked (i.e. - many Kubernetes environments). To activate the [rootless entrypoint](entrypoint-rootless.sh) the following conditions must be met:
+
+* Set the environment variable `ROOTLESS` to `true`
+* Set the actual UID/GID of the container to be your desired values (they must be numerical)
+  * Note: the `PUID` and `PGID` variables do not apply here
+* Set the appropriate ownership of your persistent data directories for `data` and `logs`
+* Any additional files or data directories, such as the `/certs` path when injecting your own certificates, must be readable by the user in which you're running as
+
+Example Kubernetes manifests are available in [k8s](./k8s).
 
 ## Optional Variables
 
@@ -265,6 +272,7 @@ In order to use the host's network namespace, you must first ensure that there a
 | `PORT_UPGRADE_V1` | `29813` | `1024`-`65535` | When upgrading the firmware for the Omada devices running firmware fully adapted to Omada Controller v4*. | >= `5.x` |
 | `PUID` | `508` | _any_ | Set the `omada` process user ID ` | >= `3.2` |
 | `PUSERNAME` | `omada` | _any_ | Set the username for the process user ID to run as | >= `5.0` |
+| `ROOTLESS` | `false` | `true`, `false` | Sets the entrypoint for [rootless mode](#running-rootless) | >= `5.14` |
 | `SHOW_SERVER_LOGS` | `true` | `true`, `false` | Outputs Omada Controller logs to STDOUT at runtime | >= `4.1` |
 | `SHOW_MONGODB_LOGS` | `false` | `true`, `false` | Outputs MongoDB logs to STDOUT at runtime | >= `4.1` |
 | `SKIP_USERLAND_KERNEL_CHECK` | `false` | `true`, `false` | When set to `true`, skips the userland/kernel match check for `armv7l` & `arm64` | >= `3.2` |
@@ -280,7 +288,7 @@ Documentation on the ports used by the controller can be found in the [TP-Link F
 
 In the examples, there are two directories where persistent data is stored: `data` and `logs`. The `data` directory is where the persistent database data is stored where all of your settings, app configuration, etc is stored. The `log` directory is where logs are written and stored. I would suggest that you use a bind mounted volume for the `data` directory to ensure that your persistent data is directly under your control and of course take regular backups within the Omada Controller application itself. Previous versions of the controller (before 5.x) also used a `work` persistent directory `omada-work` which was mapped to `/opt/tplink/EAPController/work` inside the container where the application was deployed. This `work` directory is no longer needed as of 5.0.x.
 
-## Custom Certificates
+## Custom SSL Certificates
 
 By default, Omada software uses self-signed certificates. If however you want to use custom certificates you can mount them into the container as `/cert/tls.key` and `/cert/tls.crt`. The `tls.crt` file needs to include the full chain of certificates, i.e. cert, intermediate cert(s) and CA cert. This is compatible with kubernetes TLS secrets. Entrypoint script will convert them into Java Keystore used by jetty inside the Omada SW. If you need to use different file names, you can customize them by passing values for `SSL_CERT_NAME` and `SSL_KEY_NAME` as seen above in the [Optional Variables](#optional-variables) section.
 
