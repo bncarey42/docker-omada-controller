@@ -26,7 +26,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: omada-controller
-        image: mbentley/omada-controller:5.15
+        image: mbentley/omada-controller:6.0
         imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false
@@ -60,6 +60,8 @@ spec:
           value: "29815"
         - name: PORT_RTTY
           value: "29816"
+        - name: PORT_DEVICE_MONITOR
+          value: "29817"
         - name: SHOW_SERVER_LOGS
           value: "true"
         - name: SHOW_MONGODB_LOGS

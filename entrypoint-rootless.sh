@@ -2,6 +2,8 @@
 
 set -e
 
+# omada controller entrypoint script for versions 5.x and 6.x (rootless)
+
 # set environment variables
 export TZ
 TZ="${TZ:-Etc/UTC}"
@@ -245,7 +247,7 @@ else
   LAST_RAN_OMADA_VER="0.0.0"
 fi
 
-# make sure we are not trying to upgrade from 4.x to 5.14.32.x
+# get version strings that will be useful
 LAST_RAN_MAJOR_VER="$(echo "${LAST_RAN_OMADA_VER}" | awk -F '.' '{print $1}')"
 IMAGE_MAJOR_VER="$(echo "${IMAGE_OMADA_VER}" | awk -F '.' '{print $1}')"
 IMAGE_MINOR_VER="$(echo "${IMAGE_OMADA_VER}" | awk -F '.' '{print $2}')"
@@ -259,6 +261,84 @@ then
     echo "ERROR: You are attempting to upgrade from 4.x to 5.14.x or greater; the upgrade code was removed in 5.14.x!"
     echo "  See https://github.com/mbentley/docker-omada-controller/blob/master/README_v3_and_v4.md#upgrade-path for the upgrade path from 4.x to 5.x"
     exit 1
+  fi
+fi
+
+# check to make sure we have the supported cpu features for MongoDB included with 6.x when not using an external MongoDB
+if [ "${IMAGE_MAJOR_VER}" = "6" ] && [ "${MONGO_EXTERNAL}" != "true" ]
+then
+  # running 6.x and not using external mongodb; get cpu architecture
+  ARCH="$(uname -m)"
+
+  case "${ARCH}" in
+    x86_64)
+      # amd64 checks
+      echo -n "INFO: running hardware prerequisite check for AVX support on ${ARCH} to ensure your system can run MongoDB 8..."
+
+      # check for AVX support
+      if ! grep -qE '^flags.* avx( .*|$)' /proc/cpuinfo
+      then
+        echo -e "\nERROR: your system does not support AVX which is a requirement for the v6 and above container image as it only ships with MongoDB 8"
+        echo "  See https://github.com/mbentley/docker-omada-controller/blob/master/KNOWN_ISSUES.md#your-system-does-not-support-avx-or-armv82-a for details on what exactly this means and how you can address this"
+        exit 1
+      fi
+      ;;
+    aarch64|aarch64_be|armv8b|armv8l)
+      # arm64 checks (list of 64 bit arm compatible names from `uname -m`: https://stackoverflow.com/a/45125525)
+      echo -n "INFO: running hardware prerequisite check for armv8.2-a support on ${ARCH} to ensure your system can run MongoDB 8..."
+
+      # check for armv8.2-a support
+      if ! grep -qE '^Features.* (fphp|dcpop|sha3|sm3|sm4|asimddp|sha512|sve)( .*|$)' /proc/cpuinfo
+      then
+        # failed armv8.2-a test
+        echo -e "\nERROR: your system does not support the armv8.2-a or later microarchitecture which is a requirement for the v6 and above container image as it only ships with MongoDB 8"
+        echo "  See https://github.com/mbentley/docker-omada-controller/blob/master/KNOWN_ISSUES.md#your-system-does-not-support-avx-or-armv82-a for details on what exactly this means and how you can address this"
+        exit 1
+      fi
+      ;;
+    *)
+      echo -e "\nERROR: unknown architecture (${ARCH})"
+      exit 1
+      ;;
+  esac
+
+  # prerequisite checks successful
+  echo "done"
+fi
+
+# see if this is our first run or if we are using an external MongoDB
+if [ "${LAST_RAN_OMADA_VER}" = "0.0.0" ]
+then
+  echo "INFO: skipping MongoDB data version check; first time running"
+elif [ "${MONGO_EXTERNAL}" = "true" ]
+then
+  echo "INFO: skipping MongoDB data version check; using external MongoDB"
+else
+  # check to see if we are running v6 but have mongodb persistent data from an older mongodb
+  if [ "${IMAGE_MAJOR_VER}" = "6" ] && [ "${LAST_RAN_MAJOR_VER}" != "6" ]
+  then
+    echo "INFO: Comparing your MongoDB version with the persistent data..."
+    # get wiredtiger version
+    WT_VERSION="$(grep -o 'WiredTiger [0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' /opt/tplink/EAPController/data/db/WiredTiger.turtle | cut -d' ' -f2)"
+
+    if [ -z "${WT_VERSION}" ]
+    then
+      echo "ERROR: Unable to parse the WiredTiger version!"
+      exit 1
+    fi
+
+    # check if the wiredtiger version is not 11.3.0
+    if [ "${WT_VERSION}" != "11.3.0" ]
+    then
+      echo "ERROR: Your persistent data for MongoDB is using WiredTiger ${WT_VERSION} (an older MongoDB) but this version of the image has MongoDB $(mongod --version | grep "db version" | awk -F 'n v' '{print $2}')!"
+      echo "  You either need to revert back to a previous v5 tag or manually execute the MongoDB database upgrade."
+      echo "  See https://github.com/mbentley/docker-omada-controller/tree/master/mongodb_upgrade#help-my-controller-stopped-working for instructions on what to do"
+      exit 1
+    else
+      echo "INFO: Success! Your MongoDB version matches your persistent data; continuing with entrypoint startup..."
+    fi
+  else
+    echo "INFO: Skipping MongoDB version check; image version != 6 and the last ran version != 6 (this is normal)"
   fi
 fi
 
@@ -309,6 +389,51 @@ case ${JAVA_VERSION_1}.${JAVA_VERSION_2} in
     set -- ${NEW_CMD}
     ;;
 esac
+
+# inject cloudsdk JAR at the beginning of the classpath to ensure correct certificate loads first
+# check if we're actually starting the Omada controller (not just running some other command)
+if echo "${@}" | grep -q "com.tplink.smb.omada.starter.OmadaLinuxMain"
+then
+  echo "INFO: Omada Controller startup detected; proceeding with cloudsdk JAR injection"
+
+  # find the cloudsdk JAR dynamically (version-agnostic)
+  CLOUDSDK_JAR="$(find /opt/tplink/EAPController/lib -maxdepth 1 -name "cloudsdk-*.jar" | head -n 1)"
+
+  if [ -n "${CLOUDSDK_JAR}" ]
+  then
+    echo "INFO: Found cloudsdk JAR: ${CLOUDSDK_JAR}"
+
+    # parse CMD arguments to find and modify the -cp parameter
+    NEW_ARGS=()
+    NEXT_IS_CP=false
+
+    for ARG in "${@}"
+    do
+      if [ "${NEXT_IS_CP}" = "true" ]
+      then
+        # this is the classpath value; inject cloudsdk JAR at the beginning
+        NEW_ARGS+=("${CLOUDSDK_JAR}:${ARG}")
+        NEXT_IS_CP=false
+        echo "INFO: Modified classpath to: ${CLOUDSDK_JAR}:${ARG}"
+      elif [ "${ARG}" = "-cp" ] || [ "${ARG}" = "-classpath" ]
+      then
+        # found the classpath flag
+        NEW_ARGS+=("${ARG}")
+        NEXT_IS_CP=true
+      else
+        # regular argument
+        NEW_ARGS+=("${ARG}")
+      fi
+    done
+
+    # replace the original arguments with modified ones
+    set -- "${NEW_ARGS[@]}"
+  else
+    echo "WARN: cloudsdk JAR not found; classpath injection skipped (cloud connection may fail!)"
+  fi
+else
+  echo "INFO: Not starting Omada Controller; skipping cloudsdk JAR injection"
+fi
 
 # check for autobackup
 if [ ! -d "/opt/tplink/EAPController/data/autobackup" ]

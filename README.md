@@ -7,6 +7,7 @@ For references on running a legacy v3 or v4 controller, see the [README for v3 a
 ## Table of Contents
 
 * [Quickstart Guide](#quickstart-guide)
+* [v5 to v6 Upgrade Guide](#v5-to-v6-upgrade-guide)
 * [Image Tags](#image-tags)
     * [Multi-arch Tags](#multi-arch-tags)
     * [Tags for Beta/Testing](#tags-for-betatesting)
@@ -26,7 +27,7 @@ For references on running a legacy v3 or v4 controller, see the [README for v3 a
     * [Running Rootless](#running-rootless)
     * [Using Docker Compose](#using-docker-compose)
     * [Using k8s](#using-k8s)
-* [Optional Variables](#optional-variables)
+* [Optional Environment Variables](#optional-environment-variables)
 * [Persistent Data](#persistent-data)
 * [Custom SSL Certificates](#custom-ssl-certificates)
 * [Time Zones](#time-zones)
@@ -56,32 +57,37 @@ If you don't know much about Docker or want to just get started as easily as pos
 
 1. **Docker**
     * This guide assumes that you have Docker installed. If you don't, I would suggest starting [here](https://www.docker.com/get-started/).
+1. **Verifying your CPU supports the required features for v6 of the image and above**
+    * Due to the MongoDB 8 system requirements, specific CPU features are required to run v6 of the controller image and above.
+    * Included in this repo is a shell script ([mongodb8_cpu_support_check.sh](./mongodb8_cpu_support_check.sh)) which can be executed to test for the required CPU features
+    * If this script indicates that your CPU is not supported, check out the [KNOWN ISSUES section on this for clean installs](./KNOWN_ISSUES.md#clean-install) for how you can proceed with the v6 controller image.
 1. **Picking an image tag**
-    * Most people will want to use a major.minor tag version (i.e. - `5.15`) as this is the safest option and can almost certainly be considered to be non-breaking when a new version of the image is available.
-    * **USING THE `latest` TAG IS A BAD IDEA - DO NOT DO IT!** Using `latest` may upgrade you to a newer version (i.e. - `5.15` to `6.0`) when it comes out and there is no guarantee that there will not be potentially breaking changes between those versions!
-    * If you need to create PDF reports from the controller, there are [tags with Chromium](#tags-with-chromium) as that is required to generate them. Those images are much larger and only available for `amd64` so only use them if you really need that functionality.
+    * Most people will want to use a major.minor tag version (i.e. - `6.0`) as this is the safest option and can almost certainly be considered to be non-breaking when a new version of the image is available.
+    * If updating the tag between minor versions is not ideal for you, there is also the major tag version (i.e. - `5`) which should be safe from most non-breaking changes.
+    * **USING THE `latest` TAG IS A BAD IDEA - DO NOT DO IT!** Using `latest` may upgrade you to a newer version (i.e. - `5.15` to `6.0`) when it comes out and there is no guarantee that there will not be potentially breaking changes between those versions! Instead, use one of the two tag types above.
+    * ~~If you need to create PDF reports from the controller, there are [tags with Chromium](#tags-with-chromium) as that is required to generate them. Those images are much larger and only available for `amd64` so only use them if you really need that functionality.~~ Reports are now CSV and XLSX so they do not require Chromium.
 1. **Picking your networking mode**
     * There are three main options regarding how your container is exposed to your network, which is required to manage your TP-Link Omada enabled devices:
-      * [Host network driver](#using-nethost) - this is the best and easiest option as it exposes the container using your Docker host's network interface as if you were running the controller outside of a container.
-      * [Bridge network driver](#using-port-mapping) - this is also referred to just as using port mapping where the container runs on it's own isolated network. Many applications work fine in this mode but with the Omada Controller, this makes things more difficult due to how discovery works of TP-Link Omada enabled devices. I would advise against using this method unless you have a good reason to do so as you will need to manually configure your devices to know where the controller is running before they can be adopted (see the FAQ in the link shared)
-      * **macvlan** - this is not covered by this guide as it's a more advanced topic - if you know how and when to use macvlan, I shouldn't have to explain it. If you want to learn, there are several GitHub issues in this repo where macvlan is discussed.
+        * [Host network driver](#using-nethost) - this is the best and easiest option as it exposes the container using your Docker host's network interface as if you were running the controller outside of a container.
+        * [Bridge network driver](#using-port-mapping) - this is also referred to just as using port mapping where the container runs on it's own isolated network. Many applications work fine in this mode but with the Omada Controller, this makes things more difficult due to how discovery works of TP-Link Omada enabled devices. I would advise against using this method unless you have a good reason to do so as you will need to manually configure your devices to know where the controller is running before they can be adopted (see the FAQ in the link shared)
+        * **macvlan** - this is not covered by this guide as it's a more advanced topic - if you know how and when to use macvlan, I shouldn't have to explain it. If you want to learn, there are several GitHub issues in this repo where macvlan is discussed.
 1. **How to manage your persistent data**
     * The data for the controller needs to be persisted outside of the container so that your configuration and settings are not lost between restarts, upgrades, etc. See [Persistent Data](#persistent-data) for details on what directories are important for maintaining your persistent data.
     * There are two main ways to persist data: in Docker managed volumes (which the examples use) or bind mounts. See the Docker docs on [bind mounts](https://docs.docker.com/engine/storage/bind-mounts/) for details on how that works.
 1. **How to run the container**
     * There are several ways to run your controller container:
-      * [docker run...](#example-usage)
-        * Examples for both host (_prefered_) and bridge network modes
-        * Uses the latest major.minor (i.e. - `5.15`) tag
-        * Only requires Docker to be set up
-      * [docker compose](#using-docker-compose)
-        * Examples for both host (_prefered_) and bridge network modes
-        * Uses the latest major.minor (i.e. - `5.15`) tag
-        * Requires Docker and [Docker Compose](https://docs.docker.com/compose/) to be set up
-      * [k8s](#using-k8s)
-        * Deployment is k8s is an advanced topic; only use this if you know what you are doing and can support yourself.
-      * **3rd party services**
-        * There are many 3rd party container marketplaces built into NAS devices or other appliances which can simplify the deployment - see those specific tools for instructions as that is beyond the scope of this guide.
+        * [docker run...](#example-usage)
+            * Examples for both host (_preferred_) and bridge network modes
+            * Uses the latest major.minor (i.e. - `6.0`) tag
+            * Only requires Docker to be set up
+        * [docker compose](#using-docker-compose)
+            * Examples for both host (_preferred_) and bridge network modes
+            * Uses the latest major.minor (i.e. - `6.0`) tag
+            * Requires Docker and [Docker Compose](https://docs.docker.com/compose/) to be set up
+        * [k8s](#using-k8s)
+            * Deployment is k8s is an advanced topic; only use this if you know what you are doing and can support yourself.
+        * **3rd party services**
+            * There are many 3rd party container marketplaces built into NAS devices or other appliances which can simplify the deployment - see those specific tools for instructions as that is beyond the scope of this guide.
 1. **Controller Maintenance and Operations**
     * [Controller Backups](#controller-backups) - how to configure and take backups
     * [Controller Upgrades](#controller-upgrades) - how to upgrade the controller by updating the image
@@ -90,6 +96,28 @@ If you don't know much about Docker or want to just get started as easily as pos
     * Once deployed, the Omada Controller will be available on `https://<ip-address-or-hostname>:8043/`, assuming you're using the default ports.
 1. **Have further questions?**
     * Open a [Discussion in the Help category](https://github.com/mbentley/docker-omada-controller/discussions/categories/help) and the community will give you a hand, when they are able.
+
+## v5 to v6 Upgrade Guide
+
+There are three main options for upgrading from v5 to v6:
+
+1. **MongoDB Upgrade Container** - run the MongoDB upgrade container (process described below)
+1. **Controller Migration** - stand up a new v6 controller along side your v5 controller and use the built in migration tool within the Omada Controller
+1. **Controller Backup & Restore** - take a backup through the Omada Controller application from your v5 controller, start up a brand new v6 controller with all new persistent data directories and restore your v5 configuration file
+
+This upgrade guide will focus on using the MongoDB upgrade container. The native controller migration and backup & restore procedures are using built in controller capabilities so you should follow TP-Link documentation but those details are out of scope of this guide.
+
+**Note**: The upgrade requires a manual step of a MongoDB upgrade which is automated but it has to be run as a separate container while the controller is **stopped**.
+
+There are a few reasons for the manual upgrade:
+
+* The base OS image needs to be updated as Ubuntu 20.04 is no longer receiving security updates
+* MongoDB 8 currently receives updates and is supposed to be more reliable and perform better than the old 3.6 version
+* In order to upgrade MongoDB, it has to be done in steps and to make the upgrade from 3.6 to 8, many versions have to be executed and there are VERY specific operating system versions that support all of the needed versions which allows the complete upgrade to be done in one manual container run
+
+Now that you understand why there is manual step required, see [the MongoDB upgrade guide](./mongodb_upgrade/) for detailed instructions on how to proceed with the upgrade.
+
+If you tried to run the v6 controller without doing the upgrade, see [HELP! My Controller Stopped Working!](./mongodb_upgrade/#help-my-controller-stopped-working) for steps to get back to a working state or what you need to do to get back to a state where you can perform the upgrade.
 
 ## Image Tags
 
@@ -101,18 +129,12 @@ For a full tag list, search the [Docker Hub tags list](https://hub.docker.com/r/
 
 | Tag(s) | Major.Minor Release | Current Version |
 | :----- | ------------------- | --------------- |
-| `latest`, `5.15` | `5.15.x` | `5.15.24.19` |
-| `5.14` | `5.14.x` | `5.14.32.4` |
+| `6`, `6.0` | `6.0.x` | `6.0.0.24` |
+| `latest`, `5`, `5.15` | `5.15.x` | `5.15.24.19` |
 
 ### Tags with Chromium
 
-**Note**: These are currently published for the `amd64` architecture only. These tags extend the tags above to add Chromium which is required to generate reports from the controller.
-
-| Tag(s) | Major.Minor Release |
-| :----- | ------------------- |
-| `latest-chromium`, `5.15-chromium` | `5.15.x` |
-| `5.14-chromium` | `5.14.x` |
-| `beta-chromium`, | `beta` |
+Going forward, Chromium is no longer required as of 5.14. If you were using a Chromium tag, go back to a normal tag. All reports should now either by CSV or XLSX format.
 
 ### Tags for Beta/Testing
 
@@ -120,11 +142,11 @@ These are multi-arch tags. For the full tag listings, see the Docker Hub tags ab
 
 | Tag(s) | Major.Minor Release | Current Version |
 | :----- | ------------------- | --------------- |
-| `beta`, `beta-5.15` | `beta` | `5.15.24.15` |
-| `beta-5.15-openj9`, `beta-5.15.24.15-openj9` | `5.15.x` Beta w/OpenJ9 | `5.15.24.15` |
+| `beta`, `beta-6.0`, `beta-6.0.0.24` | `6.0.x` Beta | `6.0.0.24` |
+| `beta-openj9`, `beta-6.0-openj9`, `beta-6.0.0.24-openj9` | `6.0.x` Beta w/OpenJ9 | `6.0.0.24` |
 | --- | --- | --- |
+| `6.0-openj9`, `6.0.0.24-openj9` | `6.0.x` w/OpenJ9 | `6.0.0.24` |
 | `5.15-openj9`, `5.15.24.19-openj9` | `5.15.x` w/OpenJ9 | `5.15.24.19` |
-| `5.14-openj9`, `5.14.32.4-openj9` | `5.14.x` w/OpenJ9 | `5.14.32.4` |
 
 ### Explicit Architecture Tags
 
@@ -132,7 +154,7 @@ If for some reason you can't use the multi-arch tags, there are explicitly tagge
 
 ### Explicit Version Tags
 
-If you need a specific version of the controller, starting with 5.13 and 5.14, there are explicitly tagged images with the exact version (i.e. - `5.15.24.19`) in the tag name. Check [Docker Hub](https://hub.docker.com/r/mbentley/omada-controller/tags) for the full list of tags.
+If you need a specific version of the controller, starting with 5.13 and 5.14, there are explicitly tagged images with the exact version (i.e. - `6.0.0.24`) in the tag name. Check [Docker Hub](https://hub.docker.com/r/mbentley/omada-controller/tags) for the full list of tags.
 
 ## Archived Tags
 
@@ -140,6 +162,8 @@ These images are still published on Docker Hub but are no longer regularly updat
 
 | Tag(s) | Major.Minor Release | Current Version |
 | :----- | ------------------- | ----------------|
+| `5.14` | `5.14.x` | `5.14.32.4` |
+| `5.14-openj9`, `5.14.32.4-openj9` | `5.14.x` w/OpenJ9 | `5.14.32.4` |
 | `5.13` | `5.13.x` | `5.13.30.8` |
 | `5.13-chromium` | `5.13.x` | `5.13.30.8` |
 | `5.13-openj9`, `5.13.30.8-openj9` | `5.13.x` w/OpenJ9 | `5.13.30.8` |
@@ -200,10 +224,11 @@ There are some differences between the build steps for `amd64`, `arm64`, and `ar
 
   ```
   docker build \
-    --build-arg INSTALL_VER="5.15.24.19" \
+    --build-arg BASE=mbentley/ubuntu:24.04 \
+    --build-arg INSTALL_VER="6.0.0.24" \
     --build-arg ARCH="amd64" \
-    -f Dockerfile.v5.x \
-    -t mbentley/omada-controller:5.15-amd64 .
+    -f Dockerfile \
+    -t mbentley/omada-controller:6.0-amd64 .
   ```
 
 ### `arm64`
@@ -212,10 +237,11 @@ There are some differences between the build steps for `amd64`, `arm64`, and `ar
 
   ```
   docker build \
-    --build-arg INSTALL_VER="5.15.24.19" \
+    --build-arg BASE=mbentley/ubuntu:24.04 \
+    --build-arg INSTALL_VER="6.0.0.24" \
     --build-arg ARCH="arm64" \
-    -f Dockerfile.v5.x \
-    -t mbentley/omada-controller:5.15-arm64 .
+    -f Dockerfile \
+    -t mbentley/omada-controller:6.0-arm64 .
   ```
 
 ### `armv7l`
@@ -229,7 +255,7 @@ There are some differences between the build steps for `amd64`, `arm64`, and `ar
     --build-arg INSTALL_VER="5.15.8.2" \
     --build-arg ARCH="armv7l" \
     --build-arg BASE="ubuntu:16.04" \
-    -f Dockerfile.v5.x \
+    -f Dockerfile \
     -t mbentley/omada-controller:5.15-armv7l .
   ```
 
@@ -237,7 +263,7 @@ There are some differences between the build steps for `amd64`, `arm64`, and `ar
 
 ## Example Usage
 
-These example below are based on `docker run...` commands. See [Using Docker Compose](#using-docker-compose) for compose examples or [Using k8s](#using-k8s) for example k8s manifests. See [Optional Variables](#optional-variables) for details on the environment variables that can modify the behavior of the controller inside the container. To run this Docker image and keep persistent data in named volumes:
+These example below are based on `docker run...` commands. See [Using Docker Compose](#using-docker-compose) for compose examples or [Using k8s](#using-k8s) for example k8s manifests. See [Optional Environment Variables](#optional-environment-variables) for details on the environment variables that can modify the behavior of the controller inside the container. To run this Docker image and keep persistent data in named volumes:
 
 ### Using `net=host`
 
@@ -253,7 +279,7 @@ docker run -d \
   -e TZ=Etc/UTC \
   -v omada-data:/opt/tplink/EAPController/data \
   -v omada-logs:/opt/tplink/EAPController/logs \
-  mbentley/omada-controller:5.15
+  mbentley/omada-controller:6.0
 ```
 
 ### Using port mapping
@@ -274,11 +300,11 @@ docker run -d \
   -p 19810:19810/udp \
   -p 27001:27001/udp \
   -p 29810:29810/udp \
-  -p 29811-29816:29811-29816 \
+  -p 29811-29817:29811-29817 \
   -e TZ=Etc/UTC \
   -v omada-data:/opt/tplink/EAPController/data \
   -v omada-logs:/opt/tplink/EAPController/logs \
-  mbentley/omada-controller:5.15
+  mbentley/omada-controller:6.0
 ```
 
 ### Using non-default ports
@@ -293,7 +319,7 @@ There is an optional ability to run the container in a rootless mode. This versi
 
 * Set the environment variable `ROOTLESS` to `true`
 * Set the actual UID/GID of the container to be your desired values (they must be numerical)
-  * Note: the `PUID` and `PGID` variables do not apply here
+    * Note: the `PUID` and `PGID` variables do not apply here
 * Set the appropriate ownership of your persistent data directories for `data` and `logs`
 * Any additional files or data directories, such as the `/certs` path when injecting your own certificates, must be readable by the user in which you're running as
 
@@ -311,24 +337,27 @@ docker compose up -d
 
 There are some Kubernetes manifest examples in the [k8s](./k8s) directory of this repository which can help as a guide for how to run the controller. It's assumed that you will know how to modify and use these manifests on k8s if you choose that as your deployment option.
 
-## Optional Variables
+## Optional Environment Variables
 
 | Variable | Default | Values | Description | Valid For |
 | :------- | :------ | :----: | :---------- | :-------: |
+| `EAP_MONGOD_URI` | _null_ | `mongodb://user:pass@1.2.3.4:27017/omada` | Used to specify the URI of MongoDB when running it external to the controller container | >= `5.x` |
 | `MANAGE_HTTP_PORT` | `8088` | `1024`-`65535` | Management portal HTTP port; for ports < 1024, see [Unprivileged Ports](#unprivileged-ports) | >= `3.2` |
 | `MANAGE_HTTPS_PORT` | `8043` | `1024`-`65535` | Management portal HTTPS port; for ports < 1024, see [Unprivileged Ports](#unprivileged-ports) | >= `3.2` |
+| `MONGO_EXTERNAL` | `false` | `true`, `false` | Disables MongoDB from starting inside the controller container; used for external MongoDB | >= 5.x |
 | `PGID` | `508` | _any_ | Set the `omada` process group ID ` | >= `3.2` |
 | `PGROUP` | `omada` | _any_ | Set the group name for the process group ID to run as | >= `5.0` |
 | `PORTAL_HTTP_PORT` | `8088` | `1024`-`65535` | User portal HTTP port; for ports < 1024, see [Unprivileged Ports](#unprivileged-ports) | >= `4.1` |
 | `PORTAL_HTTPS_PORT` | `8843` | `1024`-`65535` | User portal HTTPS port; for ports < 1024, see [Unprivileged Ports](#unprivileged-ports) | >= `4.1` |
-| `PORT_ADOPT_V1` | `29812` | `1024`-`65535` | Omada Controller and Omada Discovery Utility manage the Omada devices running firmware fully adapted to Omada Controller v4* | >= `5.x` |
 | `PORT_APP_DISCOVERY` | `27001` | `1024`-`65535` | Omada Controller can be discovered by the Omada APP within the same network through this port | >= `5.x` |
 | `PORT_DISCOVERY` | `29810` | `1024`-`65535` | Omada Controller and Omada Discovery Utility discover Omada devices | >= `5.x` |
 | `PORT_MANAGER_V1` | `29811` | `1024`-`65535` | Omada Controller and Omada Discovery Utility manage the Omada devices running firmware fully adapted to Omada Controller v4* | >= `5.x` |
+| `PORT_ADOPT_V1` | `29812` | `1024`-`65535` | Omada Controller and Omada Discovery Utility manage the Omada devices running firmware fully adapted to Omada Controller v4* | >= `5.x` |
+| `PORT_UPGRADE_V1` | `29813` | `1024`-`65535` | When upgrading the firmware for the Omada devices running firmware fully adapted to Omada Controller v4*. | >= `5.x` |
 | `PORT_MANAGER_V2` | `29814` | `1024`-`65535` | Omada Controller and Omada Discovery Utility manage the Omada devices running firmware fully adapted to Omada Controller v5* | >= `5.x` |
 | `PORT_TRANSFER_V2` | `29815` | `1024`-`65535` | Omada Controller receives Device Info and Packet Capture files from the Omada devices | >= `5.9` |
 | `PORT_RTTY` | `29816` | `1024`-`65535` | Omada Controller establishes the remote control terminal session with the Omada devices | >= `5.9` |
-| `PORT_UPGRADE_V1` | `29813` | `1024`-`65535` | When upgrading the firmware for the Omada devices running firmware fully adapted to Omada Controller v4*. | >= `5.x` |
+| `PORT_DEVICE_MONITOR` | `29817` | `1024`-`65535` | Omada Controller ??? (currently unknown the full purpose) | >= `6.0` |
 | `PUID` | `508` | _any_ | Set the `omada` process user ID ` | >= `3.2` |
 | `PUSERNAME` | `omada` | _any_ | Set the username for the process user ID to run as | >= `5.0` |
 | `ROOTLESS` | `false` | `true`, `false` | Sets the entrypoint for [rootless mode](#running-rootless) | >= `5.14` |
@@ -349,7 +378,7 @@ In the examples, there are two directories where persistent data is stored: `dat
 
 ## Custom SSL Certificates
 
-By default, Omada software uses self-signed certificates. If however you want to use custom certificates you can mount them into the container as `/cert/tls.key` and `/cert/tls.crt`. The `tls.crt` file needs to include the full chain of certificates, i.e. cert, intermediate cert(s) and CA cert. This is compatible with kubernetes TLS secrets. Entrypoint script will convert them into Java Keystore used by jetty inside the Omada SW. If you need to use different file names, you can customize them by passing values for `SSL_CERT_NAME` and `SSL_KEY_NAME` as seen above in the [Optional Variables](#optional-variables) section.
+By default, Omada software uses self-signed certificates. If however you want to use custom certificates you can mount them into the container as `/cert/tls.key` and `/cert/tls.crt`. The `tls.crt` file needs to include the full chain of certificates, i.e. cert, intermediate cert(s) and CA cert. This is compatible with kubernetes TLS secrets. Entrypoint script will convert them into Java Keystore used by jetty inside the Omada SW. If you need to use different file names, you can customize them by passing values for `SSL_CERT_NAME` and `SSL_KEY_NAME` as seen above in the [Optional Environment Variables](#optional-environment-variables) section.
 
 **Warning** - As of the version 4.1, certificates can also be installed through the web UI. You should not attempt to mix certificate management methods as installing certificates via the UI will store the certificates in MongoDB and then the `/cert` volume method will cease to function. If you installed certificates using the UI and want to revert this - see [this discussion](https://github.com/mbentley/docker-omada-controller/discussions/527).
 
