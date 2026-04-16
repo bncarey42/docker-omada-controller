@@ -36,6 +36,10 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       {{- end }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name | trimSuffix "-helm" }}
           {{- if .Values.config.rootless }}
@@ -54,6 +58,8 @@ spec:
               value: {{ .Values.config.ports.manageHttp | quote }}
             - name: PORTAL_HTTPS_PORT
               value: {{ .Values.config.ports.portalHttps | quote }}
+            - name: UPGRADE_HTTPS_PORT
+              value: {{ .Values.config.ports.upgradeHttps | quote }}
             - name: PORTAL_HTTP_PORT
               value: {{ .Values.config.ports.portalHttp | quote }}
             - name: PORT_APP_DISCOVERY
@@ -74,25 +80,50 @@ spec:
               value: {{ .Values.config.ports.rtty | quote }}
             - name: PORT_DEVICE_MONITOR
               value: {{ .Values.config.ports.deviceMonitor | quote }}
+            - name: WEB_CONFIG_OVERRIDE
+              value: {{ .Values.config.webConfigOverride | quote }}
             - name: ROOTLESS
               value: {{ .Values.config.rootless | quote }}
             - name: SHOW_SERVER_LOGS
               value: {{ .Values.config.showServerLogs | quote }}
             - name: SHOW_MONGODB_LOGS
+              {{- if or .Values.config.externalMongoDBUrl (and .Values.config.externalMongoDBUrlSecret.name .Values.config.externalMongoDBUrlSecret.key) }}
+              value: "false"
+              {{- else }}
               value: {{ .Values.config.showMongoDBLogs | quote }}
+              {{- end }}
             - name: SSL_CERT_NAME
               value: {{ .Values.config.sslCertName | quote }}
             - name: SSL_KEY_NAME
-              value: {{ .Values.config.sslKeyName | quote }}            
+              value: {{ .Values.config.sslKeyName | quote }}
             - name: TZ
               value: {{ .Values.config.timezone | quote }}
             {{- if .Values.config.tls1Enabled }}
             - name: TLS_1_11_ENABLED
               value: "true"
             {{- end }}
-            {{- if .Values.config.externalMongoDBUrl }}
+            {{- if and .Values.config.externalMongoDBUrlSecret.name (not .Values.config.externalMongoDBUrlSecret.key) }}
+            {{- fail "config.externalMongoDBUrlSecret.key is required when config.externalMongoDBUrlSecret.name is set." }}
+            {{- end }}
+            {{- if and .Values.config.externalMongoDBUrlSecret.key (not .Values.config.externalMongoDBUrlSecret.name) }}
+            {{- fail "config.externalMongoDBUrlSecret.name is required when config.externalMongoDBUrlSecret.key is set." }}
+            {{- end }}
+            {{- if and .Values.config.externalMongoDBUrl (and .Values.config.externalMongoDBUrlSecret.name .Values.config.externalMongoDBUrlSecret.key) }}
+            {{- fail "config.externalMongoDBUrl and config.externalMongoDBUrlSecret are mutually exclusive. Please set only one." }}
+            {{- end }}
+            {{- if and .Values.config.externalMongoDBUrlSecret.name .Values.config.externalMongoDBUrlSecret.key }}
+            - name: EAP_MONGOD_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.externalMongoDBUrlSecret.name }}
+                  key: {{ .Values.config.externalMongoDBUrlSecret.key }}
+            - name: MONGO_EXTERNAL
+              value: "true"
+            {{- else if .Values.config.externalMongoDBUrl }}
             - name: EAP_MONGOD_URI
               value: {{ .Values.config.externalMongoDBUrl | quote }}
+            - name: MONGO_EXTERNAL
+              value: "true"
             {{- end }}
             {{- range $key, $value := .Values.extraEnvVars }}
             - name: {{ $key }}
@@ -105,6 +136,11 @@ spec:
             - name: manage-http
               containerPort: {{ .Values.config.ports.manageHttp }}
               protocol: TCP
+            {{- if ne .Values.config.ports.upgradeHttps .Values.config.ports.manageHttps }}
+            - name: upgrade-https
+              containerPort: {{ .Values.config.ports.upgradeHttps }}
+              protocol: TCP
+            {{- end }}
             - name: portal-https
               containerPort: {{ .Values.config.ports.portalHttps }}
               protocol: TCP
@@ -159,8 +195,13 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if or .Values.persistence.extraVolumeMounts ( or .Values.persistence.data.enabled .Values.persistence.logs.enabled ) }}
+          {{- if or .Values.config.tlsSecretName .Values.persistence.extraVolumeMounts ( or .Values.persistence.data.enabled .Values.persistence.logs.enabled ) }}
           volumeMounts:
+            {{- if .Values.config.tlsSecretName }}
+            - name: tls-cert
+              mountPath: /cert
+              readOnly: true
+            {{- end }}
             {{- with .Values.persistence.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -185,9 +226,17 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.persistence.extraVolumes }}
+      {{- if or .Values.config.tlsSecretName .Values.persistence.extraVolumes }}
       volumes:
+        {{- if .Values.config.tlsSecretName }}
+        - name: tls-cert
+          secret:
+            secretName: {{ .Values.config.tlsSecretName }}
+            defaultMode: 0440
+        {{- end }}
+        {{- with .Values.persistence.extraVolumes }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
   {{- if or .Values.persistence.data.enabled .Values.persistence.logs.enabled }}
   volumeClaimTemplates:
@@ -195,7 +244,7 @@ spec:
     - metadata:
         name: data
       spec:
-        accessModes: 
+        accessModes:
           {{- toYaml .Values.persistence.data.accessModes | nindent 10 }}
         storageClassName: {{ .Values.persistence.data.storageClassName }}
         resources:
@@ -206,7 +255,7 @@ spec:
     - metadata:
         name: logs
       spec:
-        accessModes: 
+        accessModes:
           {{- toYaml .Values.persistence.logs.accessModes | nindent 10 }}
         storageClassName: {{ .Values.persistence.logs.storageClass }}
         resources:

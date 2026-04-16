@@ -26,7 +26,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: omada-controller
-        image: mbentley/omada-controller:6.0
+        image: mbentley/omada-controller:6.2
         imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false
@@ -44,6 +44,8 @@ spec:
           value: "8088"
         - name: PORTAL_HTTPS_PORT
           value: "8843"
+        - name: UPGRADE_HTTPS_PORT
+          value: "8043"
         - name: PORT_APP_DISCOVERY
           value: "27001"
         - name: PORT_ADOPT_V1
@@ -62,6 +64,8 @@ spec:
           value: "29816"
         - name: PORT_DEVICE_MONITOR
           value: "29817"
+        - name: WEB_CONFIG_OVERRIDE
+          value: "false"
         - name: SHOW_SERVER_LOGS
           value: "true"
         - name: SHOW_MONGODB_LOGS

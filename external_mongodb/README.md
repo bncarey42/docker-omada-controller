@@ -7,6 +7,7 @@
     * [Fresh Install Example using Compose](#fresh-install-example-using-compose)
   * [Example using `--network host`](#example-using---network-host)
     * [Migration Examples using Compose](#migration-examples-using-compose)
+* [Kubernetes Deployment Guide](#kubernetes-deployment-guide)
 
 ## Common Steps
 
@@ -64,7 +65,7 @@ You can optionally build a Docker image without MongoDB using the `NO_MONGODB=tr
     docker network create -d bridge omada
     ```
 
-    **Note**: If you're using host or macvlan networking, you obviously do not need to create a bridge but you should take care to make MongoDB listen on localhost so it's not wide open to your network.
+    **Note:** If you're using host or macvlan networking, you obviously do not need to create a bridge but you should take care to make MongoDB listen on localhost so it's not wide open to your network.
 
 ## MongoDB + Omada Controller (fresh install)
 
@@ -169,7 +170,7 @@ docker run -d \
     * Update the UID/GID to match what you run your controller as - this example uses the defaults
     * Take note of the overridden CMD - we need to set the path to where the existing persistent data lives
 
-    **Note**: this uses `mongo:3` because you otherwise have to perform an upgrade which is currently outside of the scope of this guide.
+    **Note:** This uses `mongo:3` because you otherwise have to perform an upgrade which is currently outside of the scope of this guide.
 
     ```bash
     docker run -d \
@@ -266,58 +267,4 @@ There are example compose files for migrations to an external MongoDB at [docker
 
 ## Kubernetes Deployment Guide
 
-In advanced setups, deploying applications in container orchestrators like Kubernetes is common,
-even in homelabs to enhance reliability.
-
-Below, we’ll use both Helm and Kustomize to deploy **MongoDB** and **Omada Controller**.
-
-### Deploy MongoDB
-
-We use a custom Helm chart that wraps Bitnami's MongoDB chart.
-
-The customization includes templates for managing secrets securely, avoiding the bad practice of
-hardcoding credentials in `values.yaml`.
-
-Instead, it supports tools like **External Secrets** to fetch credentials from secure vaults and
-generate Kubernetes secrets automatically.
-
-The custom Helm chart has credentials hardcoded as an example, but provides commented examples
-about how to get secrets safely from mentioned vaults.
-
-Let's deploy our chart:
-
-1. Update dependencies
-
-```console
-helm dependency update kubernetes/mongodb
-```
-
-2. Deploy MongoDB in the cluster currently pointed by your Kubeconfig
-
-> [!IMPORTANT]
-> Customize chart's parameters to meet your needs
-
-```console
-helm upgrade --install mongodb kubernetes/mongodb \
-  -f kubernetes/mongodb/values-customized.yaml \
-  -n omada-controller --create-namespace
-```
-
-### Deploy Omada Controller
-
-We'll use Kustomize since there's no official Helm chart provided by Omada Controller's maintainers
-or a trusted external provider like Bitnami.
-
-Ensure your cluster has Ingress-Nginx as the ingress controller and Cert-Manager for certificate management.
-
-If you're in an on-premises environment, you might need tools like MetalLB or Kube-VIP to provision
-load balancers for services of type LoadBalancer.
-
-To deploy Omada Controller, just execute the following command
-
-```console
-kubectl apply -k kubernetes/production
-```
-
-> [!IMPORTANT]
-> Always adjust parameters to align with your infrastructure and requirements.
+For more details on how to deploy Omada Controller with an external MongoDB database see [Kubernetes Deployment Guide](../k8s/helm/README.md).

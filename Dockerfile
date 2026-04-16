@@ -10,14 +10,17 @@ COPY healthcheck.sh install.sh /
 ARG ARCH=amd64
 
 # install version (major.minor or full version); OMADA_URL set in install.sh
-ARG INSTALL_VER="6.0.0.24"
+ARG INSTALL_VER="6.2.0.17"
 ARG NO_MONGODB=false
+
+# optional cache busting build arg (value is not actually used anywhere)
+ARG MONGODB_VER
 
 # install omada controller (instructions taken from install.sh)
 RUN /install.sh &&\
   rm /install.sh
 
-COPY entrypoint.sh entrypoint-rootless.sh /
+COPY entrypoint-unified.sh /entrypoint.sh
 
 WORKDIR /opt/tplink/EAPController/lib
 EXPOSE 8088 8043 8843 19810/udp 27001/udp 29810/udp 29811 29812 29813 29814 29815 29816 29817

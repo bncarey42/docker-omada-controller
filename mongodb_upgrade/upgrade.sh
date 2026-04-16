@@ -257,7 +257,7 @@ case "${ARCH}" in
     if ! grep -qE '^flags.* avx( .*|$)' /proc/cpuinfo
     then
       echo -e "\nERROR: your system does not support AVX which is a requirement for MongoDB starting with 5.x; you will not be able to upgrade MongoDB"
-      echo "  See https://github.com/mbentley/docker-omada-controller/blob/master/KNOWN_ISSUES.md#your-system-does-not-support-avx-or-armv82-a for details on what exactly this means and your upgrade options"
+      echo "  See https://github.com/mbentley/docker-omada-controller/blob/master/README.md#your-system-does-not-support-avx-or-armv82-a for details on what exactly this means and your upgrade options"
       exit 1
     fi
     ;;
@@ -270,7 +270,7 @@ case "${ARCH}" in
     then
       # failed armv8.2-a test
       echo -e "\nERROR: your system does not support the armv8.2-a or later microarchitecture which is a requirement for MongoDB starting with 5.x; you will not be able to upgrade MongoDB"
-      echo "  See https://github.com/mbentley/docker-omada-controller/blob/master/KNOWN_ISSUES.md#your-system-does-not-support-avx-or-armv82-a for details on what exactly this means and your upgrade options"
+      echo "  See https://github.com/mbentley/docker-omada-controller/blob/master/README.md#your-system-does-not-support-avx-or-armv82-a for details on what exactly this means and your upgrade options"
       exit 1
     fi
     ;;
@@ -300,6 +300,22 @@ if [ ! -f "/opt/tplink/EAPController/data/db/WiredTiger" ] || [ ! -f "/opt/tplin
 then
   # could not find WiredTiger or a storage.bson
   echo -e "\nERROR: could not find MongoDB related files in '/opt/tplink/EAPController/data/db' (did you mount 'data' into the container using the same path as you run for the controller?)"
+  exit 1
+fi
+
+# validate WiredTiger version to attempt to match the persistent data to MongoDB 3.6
+WT_VERSION="$(grep -o 'WiredTiger [0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' /opt/tplink/EAPController/data/db/WiredTiger.turtle | cut -d' ' -f2)"
+
+# validat that we received a value
+if [ -z "${WT_VERSION}" ]
+then
+  echo -e "\nERROR: unable to determine WiredTiger version from /opt/tplink/EAPController/data/db/WiredTiger.turtle; aborting upgrade!"
+  echo "  If you require assistance, create a Help discussion (https://github.com/mbentley/docker-omada-controller/discussions/new?category=help) with as much information as possible"
+  exit 1
+elif [ "${WT_VERSION}" != "3.1.0" ] && [ "${WT_VERSION}" != "3.1.1" ]
+then
+  echo -e "\nERROR: unexpected WiredTiger version (${WT_VERSION}) found in persistent data; expecting 3.1.0 or 3.1.1 for MongoDB 3.6 - aborting upgrade!"
+  echo "  If you require assistance, create a Help discussion (https://github.com/mbentley/docker-omada-controller/discussions/new?category=help) with as much information as possible"
   exit 1
 fi
 
